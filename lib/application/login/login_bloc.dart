@@ -1,5 +1,6 @@
 import 'package:bloc/bloc.dart';
 import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/service_locator.dart';
 import '../../domain/core/enums.dart';
@@ -17,19 +18,18 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
 
   @override
   Stream<LoginState> mapEventToState(LoginEvent event) async* {
+    final prefs = await SharedPreferences.getInstance();
+
     if (event is ChangeLoadingEvent) {
-      // if data got from server is loading is false
       try {
         yield state.copyWith(isLoading: true);
         String token = await _authServiceRepository.signIn(
             userName: state.usernameController!.text.trim(),
             password: state.passwordController!.text.trim());
 
+        await prefs.setString('token', token);
         // adding token to header
-        getIt<Dio>()
-            .options
-            .headers
-            .addAll({'x-devicetoken': 'c5406b71-e54f-46da-b512-0f31ddf95004'});
+
         getIt<Dio>().options.headers.addAll({'Authorization': 'Bearer $token'});
         // getting user
         final Map<String, dynamic> info =
@@ -40,11 +40,13 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
         yield state.copyWith(
             isLoading: false, apiResponse: ApiResponse(response: Success()));
       } on Exception catch (e, s) {
+        await prefs.setString('token', '');
         print(e);
         print(s);
         yield state.copyWith(
             isLoading: false, apiResponse: ApiResponse(response: Failure(e)));
       } catch (e, s) {
+        await prefs.setString('token', '');
         print(e);
         print(s);
         yield state.copyWith(

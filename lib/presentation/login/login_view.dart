@@ -9,7 +9,6 @@ import '../../core/service_locator.dart';
 import '../../domain/core/enums.dart';
 import '../../domain/core/general_exceptions.dart';
 import '../core/const_values.dart';
-import '../core/widget/loading_overlay.dart';
 
 class LoginView extends StatelessWidget {
   const LoginView({Key? key}) : super(key: key);
@@ -26,14 +25,11 @@ class LoginView extends StatelessWidget {
   }
 
   Widget _blocBuilder(context, state) {
-    return LoadingOverlay(
-      isLoading: state.isLoading!,
-      child: Scaffold(
-          appBar: AppBar(
-            title: const Text(login),
-          ),
-          body: _loginBody(state, context)),
-    );
+    return Scaffold(
+        appBar: AppBar(
+          title: const Text(login),
+        ),
+        body: _loginBody(state, context));
   }
 
   void _blocListen(context, state) async {
@@ -50,8 +46,6 @@ class LoginView extends StatelessWidget {
       const SnackBar(
         content: Text('SUCCESS'),
       );
-      // Navigator.of(context)
-      //     .pushNamedAndRemoveUntil(skeletonPage, (route) => false);
     }
     // failure
     if (state.apiResponse?.response is Failure) {
@@ -129,7 +123,7 @@ class LoginView extends StatelessWidget {
 
   Widget _usernameField(LoginState state) {
     return TextFormField(
-      decoration: InputDecoration(label: Text('username')),
+      decoration: const InputDecoration(label: Text('username')),
       controller: state.usernameController,
     );
   }
