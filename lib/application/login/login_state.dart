@@ -8,7 +8,7 @@ class LoginState {
   final ApiResponse? apiResponse;
   final TextEditingController? usernameController;
   final TextEditingController? passwordController;
-
+  final GlobalKey<FormState> usePassKey = GlobalKey();
   LoginState({
     this.isLoading,
     this.apiResponse,

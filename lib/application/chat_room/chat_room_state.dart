@@ -4,6 +4,7 @@ class ChatRoomState {
   final bool? isLoading;
   final bool? isSending;
   final bool? isTyping;
+
   final Map<String, File>? file;
   final ApiResponse? uploadFileRep;
   final List<ChatMessages>? chats;
@@ -48,13 +49,14 @@ class ChatRoomState {
         chats: chats ?? this.chats);
   }
 
-  void scrollToEnd() {
+  void scrollToEnd() async {
+    await Future.delayed(const Duration(milliseconds: 1000));
     if (chatScrollController.hasClients) {
       final position = chatScrollController.position.maxScrollExtent;
       chatScrollController.animateTo(
         position,
         duration: const Duration(seconds: 1),
-        curve: Curves.fastOutSlowIn,
+        curve: Curves.easeOutCubic,
       );
     }
   }

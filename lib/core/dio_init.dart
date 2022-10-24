@@ -2,8 +2,6 @@ import 'package:dio/dio.dart';
 import 'package:pretty_dio_logger/pretty_dio_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../main.dart';
-import '../presentation/core/const_routes.dart';
 import 'service_locator.dart';
 
 const String CDNBaseUrl = 'https://hillzimage.blob.core.windows.net';
@@ -47,8 +45,13 @@ Future initDio() async {
       },
       onError: (DioError error, ErrorInterceptorHandler handler) async {
         if (error.response?.statusCode == 401) {
-          navigatorKey.currentState!.popUntil((route) => true);
-          navigatorKey.currentState!.pushNamed(initPage);
+          // ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
+          //   const SnackBar(
+          //     content: Text('invalid username or password'),
+          //     backgroundColor: Colors.red,
+          //   ),
+          // );
+          handler.next(error);
         } else {
           handler.next(error);
         }

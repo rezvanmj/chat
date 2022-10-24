@@ -14,9 +14,11 @@ import 'home_state.dart';
 
 part 'home_event.dart';
 
+int notificationCounter = 0;
+
 class HomeBloc extends Bloc<HomeEvent, HomeState> {
   late IO.Socket chatSocket;
-  int notificationCounter = 0;
+  List<int> notifiedChatRoomsId = [];
   HomeBloc(HomeState init) : super(HomeState.init());
 
   @override
@@ -24,18 +26,31 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     List<ChatRoomModel> tempChatRooms = [];
     final prefs = await SharedPreferences.getInstance();
     chatSocket = io(
+        'https://api.hillzusers.com/chat',
         // 'https://test111web.ca/chat',
-        'https://test111web.ca/chat',
-        OptionBuilder().disableAutoConnect().setAuth({
+        OptionBuilder().disableAutoConnect().enableForceNew().setAuth({
           'isPanel': true,
           'token': prefs.get('token')
         }).setTransports(['websocket']).build());
 
     try {
+      // _notifyMessage(notifiedChatRoomsId, tempChatRooms);
+
       chatSocket.on('room:update', (data) {
+        print('UPDATE ROOM');
         tempChatRooms.clear();
         notificationCounter = 0;
+        ChatRoomModel updatedChatRoom = ChatRoomModel.fromJson(data);
         _getChatRooms(tempChatRooms, notificationCounter);
+        _notifyMessage(notifiedChatRoomsId, tempChatRooms);
+
+        for (var element in tempChatRooms) {
+          if (element.id == updatedChatRoom.id) {
+            tempChatRooms.remove(element);
+            tempChatRooms.add(updatedChatRoom);
+            emit(state.copyWith(chatRooms: tempChatRooms));
+          }
+        }
       });
 
       chatSocket.on('room:remove', (data) {
@@ -48,7 +63,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         notificationCounter++;
         FlutterAppIconBadge.updateBadge(notificationCounter);
         emit(state.copyWith(isLoading: true));
-        _notifyNewGroupChat();
+        _notifyNewGroupChat('new user joined chatRoom');
         _getChatRooms(tempChatRooms, notificationCounter);
       });
     } on Exception catch (err, s) {
@@ -62,12 +77,13 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     if (event is DisConnectSocket) {
       chatSocket.disconnect();
     }
+
     if (event is GetChatRoomsEvent) {
       try {
         tempChatRooms.clear();
         yield state.copyWith(isLoading: true);
 
-        _onSocketConnect(tempChatRooms);
+        _socketConfig();
         _getChatRooms(tempChatRooms, notificationCounter);
       } on Exception catch (err, s) {
         SnackBar(content: Text('error : ${err.toString()}'));
@@ -79,7 +95,29 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     }
   }
 
-  void _notifyNewGroupChat() {
+  void _notifyMessage(
+      List<int> chatRoomIds, List<ChatRoomModel> tempChatRooms) {
+    tempChatRooms.forEach((element) {
+      if (element.unreadMessagesCount != 0) {
+        if (!notifiedChatRoomsId.contains(element.id)) {
+          _notifyNewGroupChat('new message');
+          notifiedChatRoomsId.add(element.id!);
+        }
+      } else {
+        if (notifiedChatRoomsId.contains(element.id)) {
+          notifiedChatRoomsId.removeWhere((e) => e == element.id);
+        }
+      }
+    });
+    notificationCounter = chatRoomIds.length;
+    if (notificationCounter == 0) {
+      FlutterAppIconBadge.removeBadge();
+    } else {
+      FlutterAppIconBadge.updateBadge(notificationCounter);
+    }
+  }
+
+  void _notifyNewGroupChat(String alert) {
     AwesomeNotifications().createNotification(
       content: NotificationContent(
         actionType: ActionType.Default,
@@ -87,32 +125,26 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         id: 123,
         criticalAlert: true,
         channelKey: 'basic_channel',
-        title: 'notification',
-        body: 'new user joined chatRoom',
+        title: 'Hillz chat',
+        body: alert,
         payload: {"name": "FlutterCampus"},
       ),
     );
   }
 
-  void _onSocketConnect(List<ChatRoomModel> tempChatRooms) {
-    chatSocket.connect();
-    chatSocket.onConnect((_) async {
-      print('Chat Rooms connected  :> ');
-    });
-
-    chatSocket.emit('admin:join');
-    chatSocket.on('admin:newUser', (_) {});
-
-    chatSocket
-        .onDisconnect((_) => print('Connection Disconnected CHAT ROOM:<'));
-    chatSocket.onConnectError((err) => print(err));
-    chatSocket.onError((err) => print(err));
-  }
-
   void _socketConfig() {
     chatSocket.connect();
-    chatSocket.onDisconnect((_) => print('Connection Disconnected CHAT:<'));
-    chatSocket.onConnectError((err) => print(err));
+    chatSocket.onConnect((data) {
+      emit(state.copyWith(isConnecting: true));
+    });
+    chatSocket.onDisconnect((_) {
+      emit(state.copyWith(isConnecting: false));
+      print('Connection Disconnected CHAT:<');
+    });
+    chatSocket.onConnectError((err) {
+      chatSocket.connect();
+      print(' $err ');
+    });
     chatSocket.onError((err) => print(err));
   }
 
@@ -128,24 +160,15 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       dynamicList.forEach((e) {
         tempChatRooms.add(ChatRoomModel.fromJson(e));
       });
-      tempChatRooms.forEach((element) {
-        if (element.unreadMessagesCount != 0) {
-          notificationCounter++;
-        }
-      });
-      if (notificationCounter == 0) {
-        FlutterAppIconBadge.removeBadge();
-      } else {
-        FlutterAppIconBadge.updateBadge(notificationCounter);
-      }
+      _notifyMessage(notifiedChatRoomsId, tempChatRooms);
       emit(state.copyWith(isLoading: false, chatRooms: tempChatRooms));
     });
   }
 
-// @override
-// Future<void> close() {
-//   chatSocket.dispose();
-//   chatSocket.disconnect();
-//   return super.close();
-// }
+  // @override
+  // Future<void> close() {
+  //   chatSocket.dispose();
+  //   chatSocket.disconnect();
+  //   return super.close();
+  // }
 }

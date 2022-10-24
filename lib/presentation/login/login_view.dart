@@ -8,6 +8,7 @@ import '../../application/login/login_state.dart';
 import '../../core/service_locator.dart';
 import '../../domain/core/enums.dart';
 import '../../domain/core/general_exceptions.dart';
+import '../../domain/login/auth_exception.dart';
 import '../core/const_values.dart';
 
 class LoginView extends StatelessWidget {
@@ -50,12 +51,14 @@ class LoginView extends StatelessWidget {
     // failure
     if (state.apiResponse?.response is Failure) {
       final failure = state.apiResponse!.response as Failure;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(failure.failuer.toString()),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (failure.failuer is IncorrectUsernameAndPasswordException) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(failure.failuer.toString()),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
 
       /// 403 response
       if (failure.failuer is NotTrustedException) {
@@ -68,34 +71,40 @@ class LoginView extends StatelessWidget {
   }
 
   _loginBody(LoginState state, BuildContext context) {
-    return Column(
-      children: [
-        const SizedBox(
-          height: 20,
-        ),
-        Padding(
-          padding: const EdgeInsets.all(30.0),
-          child: _usernameField(state),
-        ),
-        const SizedBox(
-          height: 20,
-        ),
-        Padding(
-          padding: const EdgeInsets.all(30.0),
-          child: _passwordField(state, context),
-        ),
-        const SizedBox(
-          height: 50,
-        ),
-        if (state.isLoading!)
-          const CircularProgressIndicator()
-        else
-          OutlinedButton(
-              onPressed: () {
-                BlocProvider.of<LoginBloc>(context).add(ChangeLoadingEvent());
-              },
-              child: const Text('Login'))
-      ],
+    return Form(
+      key: state.usePassKey,
+      child: Column(
+        children: [
+          const SizedBox(
+            height: 20,
+          ),
+          Padding(
+            padding: const EdgeInsets.all(30.0),
+            child: _usernameField(state),
+          ),
+          const SizedBox(
+            height: 20,
+          ),
+          Padding(
+            padding: const EdgeInsets.all(30.0),
+            child: _passwordField(state, context),
+          ),
+          const SizedBox(
+            height: 50,
+          ),
+          if (state.isLoading!)
+            const CircularProgressIndicator()
+          else
+            OutlinedButton(
+                onPressed: () {
+                  if (state.usePassKey.currentState!.validate()) {
+                    BlocProvider.of<LoginBloc>(context)
+                        .add(ChangeLoadingEvent());
+                  } else {}
+                },
+                child: const Text('Login'))
+        ],
+      ),
     );
   }
 

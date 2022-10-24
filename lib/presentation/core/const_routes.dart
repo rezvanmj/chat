@@ -6,7 +6,7 @@ import '../confirm/confirm_view.dart';
 import '../home/home_view.dart';
 import '../unknown_page/uknown_route_page.dart';
 
-const initPage = '/init';
+// const initPage = '/init';
 const loginPage = '/login';
 const confirmPage = '/confirm';
 const homePage = '/home';

@@ -47,7 +47,13 @@ android {
 
     defaultConfig {
         multiDexEnabled true
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        compileOptions {
+            // Flag to enable support for the new language APIs
+            coreLibraryDesugaringEnabled true
+            // Sets Java compatibility to Java 8
+            sourceCompatibility JavaVersion.VERSION_1_8
+            targetCompatibility JavaVersion.VERSION_1_8
+        }
         applicationId "com.example.chat_project"
         // You can update the following values to match your application needs.
         // For more information, see: https://docs.flutter.dev/deployment/android#reviewing-the-build-configuration.
@@ -71,11 +77,7 @@ flutter {
 }
 
 dependencies {
-//    testImplementation 'junit:junit:4.12'
-//    androidTestImplementation 'androidx.test:runner:1.1.0'
-//    androidTestImplementation 'androidx.test.espresso:espresso-core:3.1.0'
-   // api 'com.google.firebase:firebase-core:16.0.9'
-   // api 'com.google.firebase:firebase-ads:16.0.1'
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:1.1.5'
     implementation 'com.google.android.material:material:1.6.1'
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
 }

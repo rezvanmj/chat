@@ -17,6 +17,7 @@ import 'package:uuid/uuid.dart';
 import '../../domain/chat_room/chat_messages_model.dart';
 import '../../domain/chat_room/chat_room_model.dart';
 import '../../domain/core/enums.dart';
+import '../../main.dart';
 
 part 'chat_room_event.dart';
 part 'chat_room_state.dart';
@@ -32,7 +33,7 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
   int tempRoomId = 0;
   List<ChatMessages> reversedList = [];
   bool tempIsTyping = false;
-
+  List<String> creationIds = [];
   ChatRoomBloc(ChatRoomState init, this._sendFileRepository)
       : super(ChatRoomState.init());
 
@@ -40,18 +41,23 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
   Stream<ChatRoomState> mapEventToState(ChatRoomEvent event) async* {
     final prefs = await SharedPreferences.getInstance();
     chatSocket = io(
-        'https://test111web.ca/chat',
-        OptionBuilder().disableAutoConnect().setAuth({
+        // 'https://test111web.ca/chat',
+        'https://api.hillzusers.com/chat',
+        OptionBuilder().disableAutoConnect().enableForceNew().setAuth({
           'isPanel': true,
           'token': prefs.get('token')
         }).setTransports(['websocket']).build());
 
     try {
+      // if (creationIds.isNotEmpty) {
+      //   chatSocket.emit('messages:seen', creationIds);
+      // }
+
       chatSocket.on('message:get', (data) {
         _getMessage(data, event);
       });
 
-      chatSocket.on('message:update', (data) {
+      chatSocket.on('messages:update', (data) {
         _updateMessage(data, event);
       });
 
@@ -81,7 +87,7 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
         Size size = _getFileSize(file);
         prs.MediaType fileType = _getFileType(file);
         _socketConfig();
-        state.scrollToEnd();
+
         if (fileType.type == 'image') {
           _sengImageFile(event, message, randomId, uploadedFile, size);
           _addChat('image', uploadedFile.filePath, uploadedFile.fileName);
@@ -89,7 +95,6 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
           _sendOtherFiles(event, message, randomId, uploadedFile);
           _addChat('file', uploadedFile.filePath, uploadedFile.fileName);
         }
-
         yield state.copyWith(isSending: false);
       } on Exception catch (e, s) {
         yield state.copyWith(
@@ -113,9 +118,15 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
       }
     }
 
+    if (event is SeenMessages) {
+      if (creationIds.isNotEmpty) {
+        _socketConfig();
+        _seenMessages();
+      }
+    }
+
     if (event is SendMessageEvent) {
       try {
-        state.scrollToEnd();
         String randomId = uuid.v4();
         yield state.copyWith(isLoading: true);
         _socketConfig();
@@ -144,6 +155,10 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
         SnackBar(content: Text('error : ${err.toString()}'));
       }
     }
+  }
+
+  void _seenMessages() {
+    chatSocket.emit('messages:seen', creationIds);
   }
 
   void _sendOtherFiles(UploadFileEvent event, String message, String randomId,
@@ -194,21 +209,18 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
 
   void _updateMessage(data, ChatRoomEvent event) {
     print('message UPDATE');
-    newMessage = ChatMessages.fromJson(data);
-    if (newMessage != null) {
-      if (newMessage!.roomId == event.chatRoomId) {
-        if (!newMessage!.isSelf!) {
-          if (!reversedList.contains(newMessage)) {
-            if (reversedList.last.id != newMessage!.id) {
-              chatSocket.emit('message:seen', newMessage!.creationId);
-              reversedList.add(newMessage!);
-              emit(state.copyWith(chats: reversedList));
-              state.scrollToEnd();
-            }
-          }
-        }
+    List<ChatMessages> updatedChats = [];
+    List<dynamic> dynamicList = data;
+    dynamicList.forEach((e) {
+      ChatMessages updatedChat = ChatMessages.fromJson(e);
+      updatedChats.add(updatedChat);
+      if (reversedList.indexWhere((element) => element.id == updatedChat.id) !=
+          -1) {
+        reversedList[reversedList.indexWhere(
+            (element) => element.id == updatedChat.id)] = updatedChat;
       }
-    }
+    });
+    emit(state.copyWith(isLoading: false, chats: reversedList));
   }
 
   void _getMessage(data, ChatRoomEvent event) {
@@ -216,13 +228,12 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
     newMessage = ChatMessages.fromJson(data);
     if (newMessage != null) {
       if (newMessage!.roomId == event.chatRoomId) {
-        if (!newMessage!.isSelf!) {
-          if (!reversedList.contains(newMessage)) {
+        if (!newMessage!.isSelf! && !reversedList.contains(newMessage)) {
+          if (reversedList.isNotEmpty) {
             if (reversedList.last.id != newMessage!.id) {
-              chatSocket.emit('message:seen', newMessage!.creationId);
               reversedList.add(newMessage!);
               emit(state.copyWith(chats: reversedList));
-              state.scrollToEnd();
+              chatSocket.emit('message:seen', newMessage!.creationId);
             }
           }
         }
@@ -234,6 +245,8 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
     ChatMessages newChat = ChatMessages(
       isSelf: true,
       src: src,
+      createdAt: DateTime.now().toString(),
+      status: 'sent',
       messageType: messageType,
       originalFileName: fileName,
       message: state.chatTextController!.text,
@@ -252,9 +265,65 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
 
   void _socketConfig() {
     chatSocket.connect();
-    chatSocket.onDisconnect((_) => print('Connection Disconnected CHAT:<'));
-    chatSocket.onConnectError((err) => print(err));
-    chatSocket.onError((err) => print(err));
+    chatSocket.onConnect((_) {});
+    chatSocket.onDisconnect((_) {
+      // _disconnectDialog();
+      print('Connection Disconnected CHAT:<');
+    });
+    chatSocket.onConnectError((err) {
+      print(err);
+    });
+
+    chatSocket.onError((err) {
+      // _disconnectDialog();
+      print(err);
+    });
+  }
+
+  void _disconnectDialog() {
+    showDialog(
+        context: navigatorKey.currentContext!,
+        builder: (context) {
+          return Dialog(
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      IconButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                          },
+                          icon: Icon(Icons.close))
+                    ],
+                  ),
+                  const Text('connection failed! '),
+                  OutlinedButton(
+                      onPressed: () async {
+                        chatSocket.disconnect();
+
+                        final prefs = await SharedPreferences.getInstance();
+                        chatSocket = io(
+                            // 'https://test111web.ca/chat',
+                            'https://api.hillzusers.com/chat',
+                            OptionBuilder().disableAutoConnect().setAuth({
+                              'isPanel': true,
+                              'token': prefs.get('token')
+                            }).setTransports(['websocket']).build());
+                        chatSocket.connect();
+                        chatSocket.onConnect((data) {
+                          Navigator.pop(context);
+                        });
+                      },
+                      child: const Text('try again'))
+                ],
+              ),
+            ),
+          );
+        });
   }
 
   void _sendMessage(SendMessageEvent event, String randomId) {
@@ -287,16 +356,23 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
       chatSocket.emit('messages:fetch', event.chatRoomId);
       chatSocket.on('messages:response', (messages) {
         List<dynamic> dynamicList = [];
+        tempChats.clear();
         dynamicList.addAll(messages);
         log('messages  ${dynamicList.length}');
         dynamicList.forEach((e) {
           tempChats.add(ChatMessages.fromJson(e));
         });
-        tempChats.forEach((element) {
-          chatSocket.emit('message:seen', element.creationId);
-        });
         reversedList = tempChats.reversed.toList();
         emit(state.copyWith(isLoading: false, chats: reversedList));
+        tempChats.forEach((element) {
+          if (!element.isSelf!) {
+            creationIds.add(element.creationId ?? '');
+          }
+        });
+        if (creationIds.isNotEmpty) {
+          _socketConfig();
+          chatSocket.emit('messages:seen', creationIds);
+        }
       });
     } catch (err) {
       emit(state.copyWith(isLoading: false));

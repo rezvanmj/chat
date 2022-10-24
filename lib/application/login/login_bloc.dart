@@ -28,7 +28,6 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
             password: state.passwordController!.text.trim());
 
         await prefs.setString('token', token);
-        // adding token to header
 
         getIt<Dio>().options.headers.addAll({'Authorization': 'Bearer $token'});
         // getting user

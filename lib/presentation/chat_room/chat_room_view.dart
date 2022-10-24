@@ -9,11 +9,14 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_chat_bubble/bubble_type.dart';
 import 'package:flutter_chat_bubble/chat_bubble.dart';
 import 'package:flutter_chat_bubble/clippers/chat_bubble_clipper_4.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/dio_init.dart';
 import '../../core/service_locator.dart';
 import '../../domain/core/enums.dart';
 import '../../domain/core/general_exceptions.dart';
+
+GlobalKey<ScaffoldState> loginScaffoldKey = GlobalKey<ScaffoldState>();
 
 class ChatRoomView extends StatefulWidget {
   ChatRoomModel chatRoom;
@@ -26,7 +29,6 @@ class ChatRoomView extends StatefulWidget {
 }
 
 class _ChatRoomViewState extends State<ChatRoomView> {
-  GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
   ScrollController chatScrollController = ScrollController();
 
   @override
@@ -50,6 +52,13 @@ class _ChatRoomViewState extends State<ChatRoomView> {
   }
 
   void _blocListener(context, ChatRoomState state) {
+    BlocProvider.of<ChatRoomBloc>(context)
+        .add(SeenMessages(widget.chatRoom.id!));
+
+    if (mounted) {
+      state.scrollToEnd();
+    }
+
     // success
     if (state.uploadFileRep?.response is Success) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -80,18 +89,44 @@ class _ChatRoomViewState extends State<ChatRoomView> {
 
   Widget _chatRoomBody(context, ChatRoomState state) {
     return Scaffold(
-      key: scaffoldKey,
+      key: loginScaffoldKey,
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            Navigator.pop(context);
-            BlocProvider.of<ChatRoomBloc>(context)
-                .add(DisConnectSocket(widget.chatRoom.id!));
-          },
-        ),
-        title: Text(state.isTyping! ? 'is Typing...' : 'Chat Room'),
-      ),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () async {
+              BlocProvider.of<ChatRoomBloc>(context)
+                  .add(DisConnectSocket(widget.chatRoom.id!));
+              Navigator.pop(context);
+            },
+          ),
+          title: Row(children: [
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: SizedBox(
+                height: 40,
+                width: 40,
+                child: CircleAvatar(
+                  child: Image.network(
+                      CDNBaseUrl + widget.chatRoom.creator!.avatar!),
+                ),
+              ),
+            ),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(widget.chatRoom.creatorIp!,
+                    style: const TextStyle(fontSize: 17)),
+                state.isTyping!
+                    ? const Text(
+                        'is Typing...',
+                        style: TextStyle(fontSize: 14),
+                      )
+                    : const SizedBox()
+              ],
+            ),
+          ])),
       body: state.isLoading!
           ? const Center(child: CircularProgressIndicator())
           : Column(
@@ -106,15 +141,63 @@ class _ChatRoomViewState extends State<ChatRoomView> {
   }
 
   Widget _chats(context, ChatRoomState state) {
-    return ListView(
+    return ListView.separated(
       controller: state.chatScrollController,
-      children: [
-        for (var chat in state.chats!) _chatBubble(chat, context),
-      ],
+      itemCount: state.chats!.length,
+      separatorBuilder: (BuildContext context, int index) {
+        return _listViewSeparator(state, index);
+      },
+      itemBuilder: (BuildContext context, int index) {
+        return _chatBubble(state.chats![index], context);
+      },
+    );
+  }
+
+  Widget _listViewSeparator(ChatRoomState state, int index) {
+    DateTime currentChatDate = DateTime.parse(state.chats![index].createdAt!);
+    DateTime nextChatDate = DateTime.parse(
+        state.chats![state.chats!.indexOf(state.chats![index]) + 1].createdAt!);
+
+    if (state.chats![index] != state.chats!.last &&
+        currentChatDate.day != nextChatDate.day) {
+      String chatDate =
+          DateFormat.yMMMMd('en_US').format(currentChatDate).toString();
+      return _chatDateItem(chatDate);
+    } else if (state.chats![index] == state.chats!.first) {
+      String chatDate =
+          DateFormat.yMMMMd('en_US').format(currentChatDate).toString();
+      return _chatDateItem(chatDate);
+    }
+    return const SizedBox.shrink();
+  }
+
+  Widget _chatDateItem(String date) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(18.0),
+        child: Container(
+          width: 150,
+          decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.4),
+              borderRadius: const BorderRadius.all(Radius.circular(20))),
+          child: Center(
+              child: Padding(
+            padding: const EdgeInsets.all(5.0),
+            child: Text(
+              date,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+            ),
+          )),
+        ),
+      ),
     );
   }
 
   ChatBubble _chatBubble(ChatMessages chat, context) {
+    var time = DateTime.parse(chat.createdAt!).toLocal();
+
+    String chatTime = DateFormat('hh:mm').format(time);
+
     return ChatBubble(
       clipper: ChatBubbleClipper4(
           type:
@@ -123,16 +206,63 @@ class _ChatRoomViewState extends State<ChatRoomView> {
       margin: const EdgeInsets.only(top: 20),
       backGroundColor:
           chat.isSelf! ? Colors.blue.withOpacity(0.4) : Colors.orange,
-      child: Container(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.7,
-        ),
-        child: chat.messageType == 'text'
-            ? _textChat(chat)
-            : chat.messageType == 'image'
-                ? _imageChat(chat)
-                : _fileChat(chat),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _chatContent(context, chat),
+          _space(height: 10),
+          _chatInfo(chat, chatTime)
+        ],
       ),
+    );
+  }
+
+  Widget _chatInfo(ChatMessages chat, String chatTime) {
+    return Wrap(
+      children: [
+        chat.status == 'seen' ? _seenIcon() : _sentIcon(),
+        _space(width: 5),
+        Text(
+          chatTime,
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+        )
+      ],
+    );
+  }
+
+  Widget _sentIcon() {
+    return const Icon(
+      Icons.done,
+      size: 18,
+      color: Colors.black,
+    );
+  }
+
+  Widget _seenIcon() {
+    return const Icon(
+      Icons.done_all,
+      size: 18,
+      color: Colors.green,
+    );
+  }
+
+  Widget _space({double? height, double? width}) {
+    return SizedBox(
+      height: height ?? 0,
+      width: width ?? 0,
+    );
+  }
+
+  Widget _chatContent(context, ChatMessages chat) {
+    return Container(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.of(context).size.width * 0.7,
+      ),
+      child: chat.messageType == 'text'
+          ? _textChat(chat)
+          : chat.messageType == 'image'
+              ? _imageChat(chat)
+              : _fileChat(chat),
     );
   }
 
@@ -150,9 +280,7 @@ class _ChatRoomViewState extends State<ChatRoomView> {
             return child;
           },
         ),
-        const SizedBox(
-          height: 10,
-        ),
+        _space(),
         Text(chat.message! ?? '')
       ],
     );
@@ -170,9 +298,7 @@ class _ChatRoomViewState extends State<ChatRoomView> {
           chat.originalFileName,
           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w400),
         ),
-        const SizedBox(
-          height: 10,
-        ),
+        _space(),
         Text(chat.message! ?? '')
       ],
     );
@@ -251,7 +377,7 @@ class _ChatRoomViewState extends State<ChatRoomView> {
             widget.pickedFile = File(result.files.single.path.toString());
             String fileName = result.names.toString();
             showDialog<ChatRoomBloc>(
-                context: scaffoldKey.currentContext!,
+                context: loginScaffoldKey.currentContext!,
                 builder: (context) {
                   return fileDialog(fileName, {'chatFile': widget.pickedFile});
                 });
@@ -273,24 +399,20 @@ class _ChatRoomViewState extends State<ChatRoomView> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text('do you want to send this file ?'),
-            const SizedBox(
-              height: 10,
-            ),
+            _space(),
             const Icon(
               Icons.file_present,
               size: 40,
               color: Colors.orange,
             ),
             Text(fileName),
-            const SizedBox(
-              height: 10,
-            ),
+            _space(),
             Row(
               children: [
                 TextButton(
                     onPressed: () {
                       BlocProvider.of<ChatRoomBloc>(
-                              scaffoldKey.currentState!.context)
+                              loginScaffoldKey.currentState!.context)
                           .add(UploadFileEvent(widget.chatRoom.id!, fileMap));
                       Navigator.pop(context);
                     },

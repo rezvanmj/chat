@@ -12,3 +12,8 @@ class DisConnectSocket extends HomeEvent {}
 class ReceiveMessageEvent extends HomeEvent {}
 
 class DeleteChatRoom extends HomeEvent {}
+
+// class SeenAllMessages extends HomeEvent {
+//   ChatRoomModel currentChatRoom;
+//   SeenAllMessages({required this.currentChatRoom});
+// }

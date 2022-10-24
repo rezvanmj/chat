@@ -21,6 +21,10 @@ class IsUserTypingEvent extends ChatRoomEvent {
   IsUserTypingEvent({required this.chatRoomId}) : super(0);
 }
 
+class SeenMessages extends ChatRoomEvent {
+  SeenMessages(super.chatRoomId);
+}
+
 class UpdateMessageEvent extends ChatRoomEvent {
   int chatRoomId;
   UpdateMessageEvent({required this.chatRoomId}) : super(0);

@@ -15,6 +15,7 @@ class NotificationController {
     );
 
     port.listen((var received) async {
+      print('background NOTIIIIIIIIIIIIIIIIIIIIIIIIIIIF');
       onSilentActionHandle(received);
     });
     _initialized = true;
@@ -34,15 +35,25 @@ class NotificationController {
   }
 
   static Future<void> _handleBackgroundAction(ReceivedAction received) async {
+    AwesomeNotifications().createNotification(
+      content: NotificationContent(
+        actionType: ActionType.Default,
+        wakeUpScreen: true,
+        id: 123,
+        criticalAlert: true,
+        channelKey: 'basic_channel',
+        title: 'Hillz chat',
+        body: 'new message from user',
+        payload: {"name": "FlutterCampus"},
+      ),
+    );
     AndroidForegroundService.startAndroidForegroundService(
-        foregroundStartMode: ForegroundStartMode.stick,
-        foregroundServiceType: ForegroundServiceType.phoneCall,
         content: NotificationContent(
             id: 2341234,
             body: 'Service is running!',
             wakeUpScreen: true,
             criticalAlert: true,
-            title: 'notification',
+            title: 'Hillz chat',
             channelKey: 'basic_channel',
             notificationLayout: NotificationLayout.Messaging,
             category: NotificationCategory.Service),

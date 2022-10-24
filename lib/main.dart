@@ -1,28 +1,60 @@
+import 'dart:async';
+
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:chat_project/presentation/core/const_routes.dart';
+import 'package:chat_project/presentation/home/home_view.dart';
 import 'package:chat_project/presentation/notification_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 
+import 'background_service.dart';
 import 'core/dio_init.dart';
 import 'core/service_locator.dart';
 
 String? token = '';
+
+final StreamController<ReceivedNotification> didReceiveLocalNotificationStream =
+    StreamController<ReceivedNotification>.broadcast();
+
+final StreamController<String?> selectNotificationStream =
+    StreamController<String?>.broadcast();
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+final service = FlutterBackgroundService();
+
 void main() async {
+  NotificationController();
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   _notificationConfig();
+  service.configure(
+    androidConfiguration: AndroidConfiguration(
+      onStart: onStart,
+      autoStart: true,
+      isForegroundMode: true,
+      foregroundServiceNotificationId: 888,
+    ),
+    iosConfiguration: IosConfiguration(
+      // auto start service
+      autoStart: true,
 
+      // this will be executed when app is in foreground in separated isolate
+      onForeground: onStart,
+
+      // you have to enable background fetch capability on xcode project
+      onBackground: onIosBackground,
+    ),
+  );
   try {
-    // setting up service locator
+    WidgetsFlutterBinding.ensureInitialized();
     setUpGetIt();
-    // initing dio (after setting locator)
     await initDio();
   } catch (e) {
     print('OMG${e}');
   }
   runApp(const MyApp());
+
+  // BackgroundFetch.registerHeadlessTask(backgroundFetchHeadlessTask);
 }
 
 void _notificationConfig() {
@@ -76,32 +108,17 @@ void _notificationConfig() {
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    // NotificationController.requestUserPermissions(
-    //   context,
-    //   channelKey: 'basic_channel',
-    //   permissionList: [],
-    // );
     return MaterialApp(
         title: 'Chat room',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
-          // This is the theme of your application.
-          //
-          // Try running your application with "flutter run". You'll see the
-          // application has a blue toolbar. Then, without quitting the app, try
-          // changing the primarySwatch below to Colors.green and then invoke
-          // "hot reload" (press "r" in the console where you ran "flutter run",
-          // or simply save your changes to "hot reload" in a Flutter IDE).
-          // Notice that the counter didn't reset back to zero; the application
-          // is not restarted.
           primarySwatch: Colors.blue,
         ),
         navigatorKey: navigatorKey,
         onGenerateRoute: generateRoute,
-        home: const InitPage());
+        home: const HomeView());
   }
 }
 
@@ -113,10 +130,78 @@ class InitPage extends StatefulWidget {
 }
 
 class _InitPageState extends State<InitPage> {
+  // bool _enabled = true;
+  // int _status = 0;
+  // final List<DateTime> _events = [];
+
   @override
   void initState() {
     super.initState();
+    // initPlatformState();
   }
+
+  // Future<void> initPlatformState() async {
+  //   // Configure BackgroundFetch.
+  //   int status = await BackgroundFetch.configure(
+  //       BackgroundFetchConfig(
+  //           minimumFetchInterval: 15,
+  //           stopOnTerminate: false,
+  //           enableHeadless: true,
+  //           requiresBatteryNotLow: false,
+  //           requiresCharging: false,
+  //           requiresStorageNotLow: false,
+  //           requiresDeviceIdle: false,
+  //           requiredNetworkType: NetworkType.ANY), (String taskId) async {
+  //     // <-- Event handler
+  //     // This is the fetch-event callback.
+  //     print("[BackgroundFetch] Event received $taskId");
+  //     setState(() {
+  //       _events.insert(0, new DateTime.now());
+  //     });
+  //     // IMPORTANT:  You must signal completion of your task or the OS can punish your app
+  //     // for taking too long in the background.
+  //     BackgroundFetch.finish(taskId);
+  //   }, (String taskId) async {
+  //     // <-- Task timeout handler.
+  //     // This task has exceeded its allowed running-time.  You must stop what you're doing and immediately .finish(taskId)
+  //     print("[BackgroundFetch] TASK TIMEOUT taskId: $taskId");
+  //     BackgroundFetch.finish(taskId);
+  //   });
+  //   print('[BackgroundFetch] configure success: $status');
+  //   setState(() {
+  //     _status = status;
+  //   });
+  //
+  //   // If the widget was removed from the tree while the asynchronous platform
+  //   // message was in flight, we want to discard the reply rather than calling
+  //   // setState to update our non-existent appearance.
+  //   if (!mounted) return;
+  // }
+  //
+  // void _onClickEnable(enabled) {
+  //   setState(() {
+  //     _enabled = enabled;
+  //   });
+  //   if (enabled) {
+  //     BackgroundFetch.start().then((int status) {
+  //       print('[BackgroundFetch] start success: $status');
+  //     }).catchError((e) {
+  //       print('[BackgroundFetch] start FAILURE: $e');
+  //     });
+  //   } else {
+  //     BackgroundFetch.stop().then((int status) {
+  //       print('[BackgroundFetch] stop success: $status');
+  //     });
+  //   }
+  // }
+  //
+  // void _onClickStatus() async {
+  //   int status = await BackgroundFetch.status;
+  //   print('[BackgroundFetch] status: $status');
+  //   setState(() {
+  //     _status = status;
+  //   });
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -126,9 +211,6 @@ class _InitPageState extends State<InitPage> {
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // logo
-
-          // sign in button
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 40.0),
             child: MaterialButton(
@@ -149,7 +231,7 @@ class _InitPageState extends State<InitPage> {
                 // }
               },
               child: const Text(
-                'signInTitle',
+                'signIn',
                 style: TextStyle(
                   // color: primaryColor,
                   fontSize: 17,
